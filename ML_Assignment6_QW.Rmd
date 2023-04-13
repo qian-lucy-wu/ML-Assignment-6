@@ -1,0 +1,288 @@
+# Assignment 6: Trees and Random Forest
+
+# Question 1
+
+```{r}
+# [10 points] PCA (Principal Component Analysis) is an unsupervised ML method that is often used to reduce dimensionality of large data sets.
+# 1. Please explain how PCA can be used to reduce the number of variables.
+# 2. Please highlight limitations of PCA.
+```
+
+1.1 PCA (Principal Component Analysis) functions by transforming a large set of variables into a smaller set of components that contain the most important information of the original dataset. If the original dataset has 10 dimensions/variables, PCA might select only the first 2-3 principal components with all PCs ordered by variance of the fitted projection. By plotting high-dimensional data into low-dimensional space, PCA reduces the dimensionality of large data sets.
+
+During this process, the PCs are found by looking for high-variance projections from multivariate x (variable) and finds the least squares fit. All the PCs are orthogonal/perpendicular to each other, with the first(second) principal component pointing to the most(second most) variance in the data. 
+
+
+1.2 While PCA is good at plotting, it does a poor job in interpreting the meaning of the principal components PC1, PC2, PC3, etc. The limitation of little interpretability is due to the fact that every PC is a combination of various x variables multiplied by their corresponding loadings. Hence, it is hard to interpret and get practical business insights from the results of PCA.
+
+For example, in the protein dataset, the first PC is composed of positive coefficients for "Cereal" and "Nuts", and negative coefficients for "Red/White Meat", "Eggs", "Milk" and so on. PC1 is thus high nut/grain, low meat/diary. The interpretation of PC1 would then be as complicated as "PC1 means less eggs and meat, and a little bit less fish, and more cereal and nuts..."
+
+
+# Question 2
+
+```{r}
+# [40 points] Trees are supervised algorithms that can be used for both regression and classification tasks. For the following trees, please explain how it is grown (i.e., how to select the variables to split on at each node)
+# 1. Classification Tree
+# 2. Regression Tree
+```
+
+For both types of trees, the selection of decision nodes is based on the same goal to minimize deviance. However, the computation of deviance is different in the two cases.
+
+
+2.1 Classification Tree
+
+The classification deviance is calculated as adding the log values of all estimated class probabilities in the same child node and taking the negative value of the total sum. The formula is written as classification deviance = - Σ [log(pi_hat)]. The optimal split is when the variable chosen for split decision brings about the lowest deviance. 
+
+The classification tree grows by first splitting the root node of data into two child nodes, and then use each child set as the new "parent" node to further split into new "child" nodes. At each tree level, we find the optimal split for dividing the "parent" into two homogeneous subsets. Every "child" becomes the "parent" at the next level, and we look again for the optimal split on their new children (the grandchildren).
+
+The stopping criteria for growing trees can be based on the minimum size of the leaf nodes (i.e. the child nodes at the last level), or the minimum proportion of deviance improvement for proceeding with a new split, or the maximum number of levels in the entire tree. We stop splitting and growing when the size of the leaf nodes hits the minimum threshold (e.g., no less than 10 obs per leaf), or the % of deviance improvement hits the minimum threshold, or the number of tree levels reaches the upper limit. 
+
+
+2.2 Regression Tree
+
+The regression deviance is calculated as the sum of squared errors of predicted values in the two child nodes in a split. The formula is written as regression deviance = Σ (y-y_hat)^2. The optimal split is when the variable chosen for split decision brings about the lowest sum of deviance from the left and right branch of child sets. 
+
+Similar to classification tree, regression trees grow through a sequence of splits, and we implement the splits recursively and greedily. The optimal split is found with the lowest deviance at each tree level, while the trees stops splitting and growing when it meets the stopping threshold. 
+
+
+# Question 3
+
+```{r}
+# [10 points] Please explain how a tree is pruned?
+```
+
+We prune a decision tree by removing split rules from the bottom up. At each step, we remove the split that contributes least to deviance reduction, thus reversing CART tree's growth process. Since each prune step produces a candidate tree model with selected variables of its decision nodes, we can compare the out-of-sample prediction performance of theses candidates to choose the "best" one with minimum OOS deviance. 
+
+Cross validation is often used here. For every candidate tree yielded from pruning, we divide the dataset into k folds/subsets, with (k-1) folds as the training set and the left-out one as the test set. We get the tree model from training data, and then evaluate the OOS deviance of the pruned tree using the test set. Repeat the same process k times with a different subset used as the test set. Take the average of all k values of OOS deviance to assess this candidate.
+
+For each prune step, repeat the procedures and find the candidate that yields the lowest OOS deviance. This candidate is the best pruned tree that we decide to use.
+
+
+# Question 4
+
+```{r}
+# [10 points] Please explain why a Random Forest usually outperforms regular regression methods (such as linear regression, logistic regression, and lasso regression).
+```
+
+Random Forest works by averaging over a bootstrapped sample of trees. RF usually outperforms regular regression methods because it avoids "optimizing to noise" and stabilizes the prediction result by considering an average of tree fits to many different subsets. In capturing the
+non-linearity and interaction among variables in the dataset, decision trees do a better job than regression models. Random Forest performs even better than pruned CART trees because the algorithm benefits from model averaging. 
+
+
+# Question 5
+
+```{r}
+# [30 points] Use the Trasaction.csv dataset to create payment default classifier ('payment_default ' column) and explain your output using:
+# 1. Classification Tree (CART)
+# 2. Random Forest
+```
+
+```{r}
+# Load the dataset
+Transaction <- read.csv("Transaction.csv")
+head(Transaction)
+
+# View(Transaction)
+```
+
+```{r}
+# Preprocess data
+library(dplyr)
+Transaction$payment_default <- as.factor(Transaction$payment_default)
+
+# View dataset
+head(Transaction)
+```
+
+# 5.1 Classification Tree
+
+```{r}
+set.seed(1)
+
+# Use 80% of data as training set and the rest 20% as test set
+train_m <- sample(1: nrow(Transaction), nrow(Transaction)*0.80)
+
+# Split the data into two sets
+Train_data <- Transaction[train_m,] 
+Test_data <- Transaction[-train_m,] 
+
+# Check their dimensions
+dim(Train_data)
+dim(Test_data)
+```
+
+# Method 1: Using tree() function
+
+```{r}
+library(tree)
+
+# Develop decision tree with training set
+mytree <- tree(payment_default ~ . , data = Train_data, method = "class")
+mytree
+```
+
+```{r}
+# Visualize the tree structure
+plot(mytree)
+text(mytree)
+```
+
+```{r}
+# Cross Validation across pruning levels
+cv_tree <- cv.tree(mytree, K = 10)
+cv_tree
+```
+
+```{r}
+# Out-0f-sample deviance is used to choose tree size:
+# cv_tree$size
+# cv_tree$dev
+plot(cv_tree$size, cv_tree$dev)
+```
+
+```{r}
+# Since size = 4 has the lowest CV Deviance, fit the tree with the optimal size
+tree_cut <- prune.tree(mytree, k = 10, best = 4)
+tree_cut
+```
+
+```{r}
+plot(tree_cut)
+text(tree_cut)
+```
+
+# Method 2: Using rpart() function
+
+```{r}
+library(rpart)
+library(rpart.plot)
+```
+
+```{r}
+# Develop a classification tree with the training set
+cart_tree <- rpart(payment_default ~ ., data = Train_data, method = "class")
+summary(cart_tree)
+```
+
+```{r}
+print(cart_tree)
+```
+
+```{r}
+# Plot the decision tree
+rpart.plot(cart_tree)
+# prp(cart_tree)
+```
+
+```{r}
+# Find the optimal cp value associated with the minimum error
+# The value of cp should be least, so that the cross-validated error rate is minimum.
+cart_tree$cptable[which.min(cart_tree$cptable[,"xerror"]),"CP"]
+
+printcp(cart_tree) # display the results
+plotcp(cart_tree) # visualize cross-validation results
+```
+
+```{r}
+# Prune the tree with minimum Cp value = 0.01
+pfit<- prune(cart_tree, cp=cart_tree$cptable[which.min(cart_tree$cptable[,"xerror"]),"CP"], k = 10)
+pfit
+```
+
+```{r}
+# Alternatively, post-pruning the tree with the selected CP value
+# control <- rpart.control(minsplit=1000, maxdepth = 4, cp = 0.01)
+cart_tree2 <- rpart(payment_default ~ ., data = Train_data, method = "class", control = rpart.control(minsplit=1000, maxdepth = 4, cp = 0.01))
+
+# Same result
+print(cart_tree2)
+```
+
+```{r}
+# Make predictions with the pruned tree model
+pred <- predict(pfit, Test_data, type = "class")
+```
+
+```{r}
+# Construct the Confusion Matrix
+table_mat <- table(Test_data$payment_default, pred)
+table_mat
+
+# Check the accuracy of the predictions
+accuracy_Test <- sum(diag(table_mat)) / sum(table_mat)
+print(paste('Accuracy for test', round(accuracy_Test, digits = 5)))
+```
+
+```{r}
+# Assess the tree performance
+library(caret)
+confusionMatrix(pred, Test_data$payment_default)
+```
+
+
+In this part, we first built a regression decision tree by using the training dataset, and applied cross validation to prune the tree back for minimal deviance. The plot shows the tree levels and decision nodes, and we predict the classification of "payment_default" by inputting x variables, going through different branches of the tree, and finally arriving at a y outcome in the leaf node. With the test dataset, the performance of CART tree is assessed with an accuracy of 81.48%.
+
+
+# 5.2 Random Forest
+
+```{r}
+# Import library of Random Forest algorithm
+library(randomForest)
+
+# Setting seed for replicating result
+set.seed(1)
+
+# Fitting Random Forest to the training set
+classifier_RF = randomForest(x = Train_data[-25],
+                             y = Train_data$payment_default,
+                             ntree = 500,
+                             importance = TRUE) ## store necessary information for variable importance
+
+# View classification results
+classifier_RF
+```
+
+```{r}
+# Alternatively...
+# RF_model <- randomForest(payment_default ~ ., data = Train_data, ntree = 500, mtry = 5)
+# RF_model
+```
+
+```{r}
+# Predicting the Test set results
+y_pred = predict(classifier_RF, newdata = Test_data[-25])
+  
+# Confusion Matrix, comparing predicted & actual outcomes
+confusion_mtx = table(Test_data[, 25], y_pred)
+confusion_mtx
+```
+
+```{r}
+# Find true positive, false positive, true negative and false negative in the matrix
+TN <- confusion_mtx[1,1]
+FP <- confusion_mtx[1,2]
+FN <- confusion_mtx[2,1]
+TP <- confusion_mtx[2,2]
+
+# Calculate the precision and recall scores of the tree model
+Accuracy <- (TP + TN) /(TP + FP + TN + FN)
+Precision <- TP/(TP + FP)
+Recall <- TP /(TP + FN)
+
+# Print out evaluation results
+sprintf("The accuracy of the model is: %.2f%%", (Accuracy*100))
+sprintf("The precision score for this model is: %.2f%%", (Precision*100))
+sprintf("The recall score for this model is: %.2f%%", (Recall*100))
+```
+
+```{r}
+# Plotting the performance of trees (x-axis represents the total number of trees in random forest; y-axis represents the error rate of classifier)
+plot(classifier_RF)
+  
+# Rank the importance of all variables (ID should be ignored as it is not a prediction factor)
+importance(classifier_RF)
+
+# Variable importance plot (PAY_0 is the most important variable in deciding payment default classification)
+varImpPlot(classifier_RF)
+```
+
+In this part, we use Random Forest to predict whether payment default will occur or not. We first built a tree model with 500 single trees from resampling, and each of them is different from others in terms of tree levels and decision nodes. We then assessed the performance of the classifier on the test dataset, resulting in an accuracy of 81.72%. By averaging prediction results from all 500 individual trees, we reduced the chance of overfitting and obtained a stable y outcome of "payment_default" (0 or 1). Unlike pruning CART (Classification) trees in the previous question, cross validation is NOT needed here.
